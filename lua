@@ -1,78 +1,65 @@
--- Optimizaciones iniciales
-if not game:IsLoaded() then game.Loaded:Wait() end
+-- South Bronx Ultra-Lite (Fix Freeze para Potassium)
+repeat task.wait() until game:IsLoaded()
+
 local player = game.Players.LocalPlayer
-local RunService = game:GetService("RunService")
 local pgui = player:WaitForChild("PlayerGui")
 
--- Limpieza
-if pgui:FindFirstChild("SouthBronxUltra") then pgui.SouthBronxUltra:Destroy() end
+-- Borrar menú anterior
+if pgui:FindFirstChild("SBX_V3") then pgui.SBX_V3:Destroy() end
 
--- --- VARIABLES ---
+local sg = Instance.new("ScreenGui", pgui)
+sg.Name = "SBX_V3"
+sg.ResetOnSpawn = false
+
+-- --- ESTADOS ---
 _G.Aimbot = false
 _G.ESP = false
-_G.AutoFarm = false
-_G.TrabajoSeleccionado = "Delivery"
-_G.MenuBloqueado = false
+_G.Farm = false
+_G.Locked = false
 
--- --- ANTI-KICK BASICO ---
-local mt = getrawmetatable(game)
-setreadonly(mt, false)
-local old = mt.__namecall
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    if method == "Kick" or method == "kick" then return nil end
+-- --- ANTI-KICK ---
+local old; old = hookmetamethod(game, "__namecall", function(self, ...)
+    if getnamecallmethod() == "Kick" then return nil end
     return old(self, ...)
 end)
 
--- --- INTERFAZ ---
-local sg = Instance.new("ScreenGui", pgui)
-sg.Name = "SouthBronxUltra"
-
-local Main = Instance.new("ScrollingFrame", sg)
-Main.Size = UDim2.new(0, 220, 0, 300)
+-- --- INTERFAZ SIMPLE (SIN LAG) ---
+local Main = Instance.new("Frame", sg)
+Main.Size = UDim2.new(0, 180, 0, 280)
 Main.Position = UDim2.new(0.05, 0, 0.2, 0)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-Main.BorderSizePixel = 0
-Main.ScrollBarThickness = 2
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 Main.Active = true
 Main.Draggable = true
+Instance.new("UICorner", Main)
 
-local layout = Instance.new("UIListLayout", Main)
-layout.Padding = UDim.new(0, 5)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
--- Función para crear botones
-local function NewButton(txt, color, callback)
+local function Btn(name, color, callback)
     local b = Instance.new("TextButton", Main)
     b.Size = UDim2.new(0.9, 0, 0, 35)
     b.BackgroundColor3 = color
-    b.Text = txt
+    b.Text = name
     b.TextColor3 = Color3.new(1,1,1)
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 12
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 14
+    Instance.new("UIListLayout", Main).Padding = UDim.new(0, 5)
     
     b.MouseButton1Click:Connect(function()
-        if not _G.MenuBloqueado or txt == "BLOQUEAR/DESBLOQUEAR" then
-            callback(b)
-        end
+        if not _G.Locked or name == "LOCK/UNLOCK" then callback(b) end
     end)
-    return b
 end
 
--- --- BOTONES DE CONTROL ---
+-- --- BOTONES ---
 
-NewButton("BLOQUEAR/DESBLOQUEAR", Color3.fromRGB(200, 0, 0), function(b)
-    _G.MenuBloqueado = not _G.MenuBloqueado
-    b.Text = _G.MenuBloqueado and "MENU: BLOQUEADO" or "MENU: DESBLOQUEADO"
+Btn("LOCK/UNLOCK", Color3.fromRGB(150, 0, 0), function(b)
+    _G.Locked = not _G.Locked
+    b.Text = _G.Locked and "MENU BLOQUEADO" or "LOCK/UNLOCK"
 end)
 
-NewButton("AIMBOT (HEAD)", Color3.fromRGB(40, 40, 50), function(b)
+Btn("AIMBOT", Color3.fromRGB(40, 40, 60), function(b)
     _G.Aimbot = not _G.Aimbot
-    b.BackgroundColor3 = _G.Aimbot and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(40, 40, 50)
+    b.BackgroundColor3 = _G.Aimbot and Color3.fromRGB(0, 100, 200) or Color3.fromRGB(40, 40, 60)
 end)
 
-NewButton("ESP (JUGADORES)", Color3.fromRGB(40, 40, 50), function(b)
+Btn("ESP", Color3.fromRGB(40, 40, 60), function(b)
     _G.ESP = not _G.ESP
     if not _G.ESP then
         for _, p in pairs(game.Players:GetPlayers()) do
@@ -81,57 +68,47 @@ NewButton("ESP (JUGADORES)", Color3.fromRGB(40, 40, 50), function(b)
     end
 end)
 
--- --- APARTADO DE TRABAJOS ---
-local TitleJobs = Instance.new("TextLabel", Main)
-TitleJobs.Size = UDim2.new(0.9, 0, 0, 20)
-TitleJobs.Text = "--- TRABAJOS ---"
-TitleJobs.TextColor3 = Color3.new(1,1,0)
-TitleJobs.BackgroundTransparency = 1
+-- Trabajos Simplificados (TP a coordenadas para no dar lag)
+local jobs = {
+    ["DELIVERY"] = Vector3.new(100, 5, 200), -- Ejemplo, ajustar coordenadas reales
+    ["CLEANER"] = Vector3.new(-50, 5, -150)
+}
 
-local trabajos = {"Delivery", "Store Clerk", "Janitor", "Trash Collector"}
-for _, nombre in pairs(trabajos) do
-    NewButton("FARM: " .. nombre, Color3.fromRGB(30, 60, 30), function()
-        _G.TrabajoSeleccionado = nombre
-        _G.AutoFarm = not _G.AutoFarm
-        print("Trabajando en: " .. nombre)
+for name, pos in pairs(jobs) do
+    Btn("FARM: "..name, Color3.fromRGB(30, 50, 30), function()
+        _G.Farm = not _G.Farm
+        task.spawn(function()
+            while _G.Farm do
+                if player.Character then 
+                    player.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+                end
+                task.wait(5)
+            end
+        end)
     end)
 end
 
--- --- LOGICA OPTIMIZADA (ANTI-FPS DROP) ---
-task.spawn(function()
-    while task.wait(0.5) do -- No corre cada frame, ahorra FPS
-        if _G.ESP then
-            for _, p in pairs(game.Players:GetPlayers()) do
-                if p ~= player and p.Character and not p.Character:FindFirstChild("Highlight") then
-                    local h = Instance.new("Highlight", p.Character)
-                    h.FillColor = Color3.new(1, 0, 0)
-                end
+-- --- BUCLE UNIFICADO (OPTIMIZADO) ---
+game:GetService("RunService").Heartbeat:Connect(function()
+    -- ESP cada 1 segundo (Ahorra FPS)
+    if _G.ESP and tick() % 1 < 0.05 then
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= player and p.Character and not p.Character:FindFirstChild("Highlight") then
+                local h = Instance.new("Highlight", p.Character)
+                h.FillColor = Color3.new(1, 0, 0)
             end
-        end
-        
-        if _G.AutoFarm then
-            -- Intentar encontrar el punto del trabajo seleccionado
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("BasePart") and v.Name:lower():find(_G.TrabajoSeleccionado:lower()) then
-                    player.Character.HumanoidRootPart.CFrame = v.CFrame + Vector3.new(0, 3, 0)
-                    break
-                end
-            end
-            task.wait(4) -- Espera para que el Anti-Cheat no te kickee por TP
         end
     end
-end)
 
--- Aimbot suave
-RunService.RenderStepped:Connect(function()
-    if _G.Aimbot then
+    -- Aimbot Suave
+    if _G.Aimbot and tick() % 0.1 < 0.02 then
         local target = nil
-        local dist = 200
+        local dist = 250
         for _, p in pairs(game.Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
-                local pos, vis = workspace.CurrentCamera:WorldToViewportPoint(p.Character.Head.Position)
+                local screenPos, vis = workspace.CurrentCamera:WorldToViewportPoint(p.Character.Head.Position)
                 if vis then
-                    local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(workspace.CurrentCamera.ViewportSize.X/2, workspace.CurrentCamera.ViewportSize.Y/2)).Magnitude
+                    local mag = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(workspace.CurrentCamera.ViewportSize.X/2, workspace.CurrentCamera.ViewportSize.Y/2)).Magnitude
                     if mag < dist then
                         target = p.Character.Head
                         dist = mag
